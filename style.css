@@ -456,6 +456,39 @@ select.form-input option { background: var(--surface2); }
 .row-critical td { background: rgba(239,68,68,.04) !important; }
 .row-warn td { background: rgba(245,158,11,.04) !important; }
 
+/* ─── Sistemas multi-select (accesos) ────────────────────── */
+.sis-check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: 6px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--navy2);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+}
+.sis-check-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-radius: var(--radius-sm);
+  cursor: pointer; user-select: none; font-size: 12.5px;
+  color: var(--text2); border: 1px solid transparent;
+  transition: all .15s; background: var(--surface2);
+}
+.sis-check-item:hover { border-color: var(--blue2); color: var(--text); background: var(--surface3); }
+.sis-check-item.checked {
+  background: rgba(37,99,235,.15);
+  border-color: var(--blue2);
+  color: var(--blue3);
+  font-weight: 600;
+}
+.sis-check-item input[type="checkbox"] {
+  width: 14px; height: 14px;
+  accent-color: var(--blue2);
+  flex-shrink: 0; cursor: pointer;
+  pointer-events: none;
+}
+
 /* ═══════════════════════════════════════════════════════
    RESPONSIVE
 ═══════════════════════════════════════════════════════ */

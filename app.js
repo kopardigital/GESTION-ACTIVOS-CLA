@@ -16,7 +16,7 @@ const AUTH = { user: 'admin', pass: 'Cambiar123!' };
    v1.1 → agrega módulo celulares + nuevos sistemas en accesos
    NUNCA eliminar claves existentes de KEYS. Solo agregar.
 ──────────────────────────────────────────────────────── */
-const DATA_VERSION = '1.1';
+const DATA_VERSION = '1.2';
 const DATA_VERSION_KEY = 'APP_DATA_VERSION';
 
 /* ─── STORAGE KEYS ──────────────────────────────────────
@@ -94,26 +94,47 @@ function migrateData() {
       console.log('[CIT] ✓ cit_celulares inicializado (vacío)');
     }
 
-    // 2. Los accesos existentes son compatibles: el campo "sistema"
-    //    sigue siendo texto libre. Los nuevos valores (TS1/TS2/TS3…)
-    //    se incorporan solo en el <select> del formulario.
-    //    No se toca ningún registro guardado.
-    console.log('[CIT] ✓ Accesos: compatibilidad hacia atrás OK (campo texto libre)');
+    // 2. Migrar campo "sistema" de string → array en accesos
+    //    (se hace también en v1.1→v1.2 por si acaso)
+    _migrateAccesosSistema();
 
-    // 3. Los equipos, toners, usuarios, licencias y movimientos
-    //    no requieren cambios estructurales en v1.1.
-    console.log('[CIT] ✓ Módulos existentes: sin cambios requeridos');
-
-    // Marcar como migrado
-    localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
+    localStorage.setItem(DATA_VERSION_KEY, '1.1');
     console.log('[CIT] ✓ Migración v1.0→v1.1 completada');
   }
 
-  // Si ya es v1.1 o superior, no hace nada
-  if (currentVersion === DATA_VERSION) return;
+  // ── Migración de v1.1 → v1.2 ──────────────────────────
+  if (currentVersion === '1.1') {
+    console.log('[CIT] Migrando datos de v1.1 → v1.2…');
 
-  // Asegurar que la clave de versión siempre esté actualizada
+    // Asegurar que todos los accesos tienen sistema como array
+    // (por si venían de v1.1 antes del multi-select)
+    _migrateAccesosSistema();
+
+    localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
+    console.log('[CIT] ✓ Migración v1.1→v1.2 completada');
+  }
+
+  // Asegurar versión actualizada
   localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
+}
+
+/* Convierte campo "sistema" de string a array en todos los accesos existentes.
+   Es idempotente: si ya es array no lo toca. */
+function _migrateAccesosSistema() {
+  const accesos = load('accesos');
+  let changed = false;
+  accesos.forEach(a => {
+    if (typeof a.sistema === 'string') {
+      // string vacío → array vacío; string con valor → array de un elemento
+      a.sistema = a.sistema ? [a.sistema] : [];
+      changed = true;
+    }
+    // Si ya es array, no hacer nada
+  });
+  if (changed) {
+    save('accesos', accesos);
+    console.log('[CIT] ✓ Accesos: campo sistema migrado a array');
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -254,15 +275,13 @@ function loadDemoData(force = false) {
   ];
 
   const accesos = [
-    { id: uid(), usuario: 'jperez', sistema: 'Epicor', perfil: 'Ventas', alta: '2020-03-01', baja: '', autorizante: 'Diego Ramírez', estado: 'Activo', obs: '' },
-    { id: uid(), usuario: 'jperez', sistema: 'Microsoft 365', perfil: 'Usuario estándar', alta: '2020-03-01', baja: '', autorizante: 'IT', estado: 'Activo', obs: '' },
-    { id: uid(), usuario: 'mgarcia', sistema: 'Microsoft 365', perfil: 'Usuario estándar', alta: '2019-07-15', baja: '', autorizante: 'IT', estado: 'Activo', obs: '' },
-    { id: uid(), usuario: 'mgarcia', sistema: 'Correo', perfil: 'mgarcia@cladan.com', alta: '2019-07-15', baja: '', autorizante: 'IT', estado: 'Activo', obs: '' },
-    { id: uid(), usuario: 'clopez', sistema: 'Power BI', perfil: 'Viewer', alta: '2021-01-10', baja: '', autorizante: 'Laura Torres', estado: 'Activo', obs: '' },
-    { id: uid(), usuario: 'rsilva', sistema: 'VPN', perfil: 'Acceso completo', alta: '2022-09-01', baja: '', autorizante: 'Jefe IT', estado: 'Activo', obs: '' },
-    { id: uid(), usuario: 'rsilva', sistema: 'Odoo', perfil: 'Logística', alta: '2022-09-01', baja: '', autorizante: 'Miguel Gómez', estado: 'Activo', obs: '' },
-    { id: uid(), usuario: 'prodriguez', sistema: 'Microsoft 365', perfil: 'Usuario estándar', alta: '2020-06-15', baja: '2024-02-28', autorizante: 'IT', estado: 'Inactivo', obs: 'Baja por desvinculación' },
-    { id: uid(), usuario: 'prodriguez', sistema: 'VPN', perfil: 'Acceso completo', alta: '2020-06-15', baja: '2024-02-28', autorizante: 'Jefe IT', estado: 'Inactivo', obs: 'Baja por desvinculación' },
+    { id: uid(), usuario: 'jperez', sistema: ['Epicor','Microsoft 365','VPN'], perfil: 'Ventas', alta: '2020-03-01', baja: '', autorizante: 'Diego Ramírez', estado: 'Activo', obs: '' },
+    { id: uid(), usuario: 'mgarcia', sistema: ['Microsoft 365','Correo','Carpetas compartidas'], perfil: 'Usuario estándar', alta: '2019-07-15', baja: '', autorizante: 'IT', estado: 'Activo', obs: '' },
+    { id: uid(), usuario: 'clopez', sistema: ['Microsoft 365','Power BI','Correo'], perfil: 'Viewer', alta: '2021-01-10', baja: '', autorizante: 'Laura Torres', estado: 'Activo', obs: '' },
+    { id: uid(), usuario: 'amartinez', sistema: ['Microsoft 365','Carpetas compartidas','TS1'], perfil: 'Usuario estándar', alta: '2021-05-20', baja: '', autorizante: 'IT', estado: 'Activo', obs: '' },
+    { id: uid(), usuario: 'rsilva', sistema: ['Microsoft 365','Odoo','VPN','TS2'], perfil: 'Logística', alta: '2022-09-01', baja: '', autorizante: 'Miguel Gómez', estado: 'Activo', obs: '' },
+    { id: uid(), usuario: 'ltorres', sistema: ['Microsoft 365','Correo','Carpetas compartidas','Power BI'], perfil: 'Admin', alta: '2015-03-01', baja: '', autorizante: 'Directorio', estado: 'Activo', obs: '' },
+    { id: uid(), usuario: 'prodriguez', sistema: ['Microsoft 365','VPN','TS3'], perfil: 'IT Admin', alta: '2020-06-15', baja: '2024-02-28', autorizante: 'Jefe IT', estado: 'Inactivo', obs: 'Baja por desvinculación' },
   ];
 
   // seed movimientos
@@ -358,8 +377,10 @@ function renderDashboard() {
 
   const usuariosDataBaja = usuarios.filter(u => u.estado === 'Baja');
   accesos.filter(a => a.estado === 'Activo').forEach(a => {
-    if (usuariosDataBaja.find(u => u.usuarioRed === a.usuario))
-      alerts.push({ level: 'high', icon: '🔐', msg: `Acceso activo a <strong>${a.sistema}</strong> para usuario <strong>${a.usuario}</strong> que está dado de baja.` });
+    if (usuariosDataBaja.find(u => u.usuarioRed === a.usuario)) {
+      const sists = Array.isArray(a.sistema) ? a.sistema.join(', ') : (a.sistema || '');
+      alerts.push({ level: 'high', icon: '🔐', msg: `Accesos activos (<strong>${sists}</strong>) para usuario <strong>${a.usuario}</strong> que está dado de baja.` });
+    }
   });
 
   alertsCont.innerHTML = alerts.slice(0, 8).map(a =>
@@ -782,35 +803,52 @@ function renderAccesos() {
   const fSist   = document.getElementById('acc-sistema')?.value  || '';
   const fEstado = document.getElementById('acc-estado')?.value   || '';
 
-  if (fSist)   data = data.filter(a => a.sistema === fSist);
+  // "sistema" puede ser array (v1.2) o string legado (migrado en init)
+  const getSistemas = a => Array.isArray(a.sistema) ? a.sistema : (a.sistema ? [a.sistema] : []);
+
+  if (fSist)   data = data.filter(a => getSistemas(a).includes(fSist));
   if (fEstado) data = data.filter(a => a.estado === fEstado);
-  if (search)  data = data.filter(a => [a.usuario,a.sistema,a.perfil,a.autorizante].join(' ').toLowerCase().includes(search));
+  if (search)  data = data.filter(a =>
+    [a.usuario, getSistemas(a).join(' '), a.perfil, a.autorizante].join(' ').toLowerCase().includes(search)
+  );
 
   document.getElementById('accesos-table').innerHTML = !data.length
     ? '<div class="table-empty">Sin resultados.</div>'
     : `<table>
     <thead><tr>
-      <th>Usuario</th><th>Sistema</th><th>Perfil / Rol</th><th>Alta</th>
+      <th>Usuario</th><th>Sistemas habilitados</th><th>Perfil / Rol</th><th>Alta</th>
       <th>Baja</th><th>Autorizante</th><th>Estado</th><th>Acciones</th>
     </tr></thead>
-    <tbody>${data.map(a => `<tr>
-      <td><span class="badge b-cyan">${a.usuario}</span></td>
-      <td>${sistemaIcon(a.sistema)} ${a.sistema}</td>
-      <td>${a.perfil||'—'}</td>
-      <td>${a.alta||'—'}</td>
-      <td>${a.baja||'—'}</td>
-      <td>${a.autorizante||'—'}</td>
-      <td>${estadoBadge(a.estado)}</td>
-      <td><div class="tbl-actions">
-        <button class="btn-ghost btn-sm" onclick="openModal('acceso','${a.id}')">✏</button>
-        <button class="btn-ghost btn-sm" style="color:var(--red)" onclick="deleteItem('accesos','${a.id}')">🗑</button>
-      </div></td>
-    </tr>`).join('')}
+    <tbody>${data.map(a => {
+      const sistemas = getSistemas(a);
+      const sistemasHTML = sistemas.length
+        ? sistemas.map(s => `<span class="badge b-blue" style="margin:1px 2px;font-size:10px">${sistemaIcon(s)} ${s}</span>`).join('')
+        : '<span style="color:var(--text3)">—</span>';
+      return `<tr>
+        <td><span class="badge b-cyan">${a.usuario}</span></td>
+        <td style="white-space:normal;max-width:260px">${sistemasHTML}</td>
+        <td>${a.perfil||'—'}</td>
+        <td>${a.alta||'—'}</td>
+        <td>${a.baja||'—'}</td>
+        <td>${a.autorizante||'—'}</td>
+        <td>${estadoBadge(a.estado)}</td>
+        <td><div class="tbl-actions">
+          <button class="btn-ghost btn-sm" onclick="openModal('acceso','${a.id}')">✏</button>
+          <button class="btn-ghost btn-sm" style="color:var(--red)" onclick="deleteItem('accesos','${a.id}')">🗑</button>
+        </div></td>
+      </tr>`;}).join('')}
     </tbody></table>`;
 }
 
 function sistemaIcon(s) {
-  const m = { 'Epicor':'⚡','Microsoft 365':'📧','Correo':'📬','VPN':'🔒','Power BI':'📊','Carpetas compartidas':'📁','Odoo':'🏭','Otro':'🔧' };
+  const m = {
+    'Epicor':'⚡','Microsoft 365':'📧','Correo':'📬','VPN':'🔒',
+    'Power BI':'📊','Carpetas compartidas':'📁','Odoo':'🏭',
+    'TS1':'🖥','TS2':'🖥','TS3':'🖥',
+    'SharePoint':'📂','Teams':'💬','Azure':'☁',
+    'GitHub':'🐙','Jira':'📌','SAP':'🏢',
+    'Salesforce':'☁','Zoom':'📹','Slack':'💬','Otro':'🔧',
+  };
   return m[s]||'🔧';
 }
 
@@ -862,7 +900,14 @@ function renderReportes() {
     { icon:'✓', title:'Usuarios activos', desc:`${usuarios.filter(u=>u.estado==='Activo').length} usuarios activos en plantilla.`, action: () => exportReportXLS('Usuarios Activos', usuarios.filter(u=>u.estado==='Activo'), ['nombre','usuarioRed','email','sector','puesto','sucursal','equipo']) },
     { icon:'↓', title:'Usuarios dados de baja', desc:`${usuarios.filter(u=>u.estado==='Baja').length} desvinculados.`, action: () => exportReportXLS('Usuarios Baja', usuarios.filter(u=>u.estado==='Baja'), ['nombre','usuarioRed','sector','ingreso','baja','obs']) },
     { icon:'🔑', title:'Licencias asignadas', desc:'Detalle de asignaciones de software.', action: () => exportExcelModule('licencias') },
-    { icon:'🔐', title:'Accesos activos', desc:`${accesos.filter(a=>a.estado==='Activo').length} accesos habilitados.`, action: () => exportReportXLS('Accesos Activos', accesos.filter(a=>a.estado==='Activo'), ['usuario','sistema','perfil','alta','autorizante']) },
+    { icon:'🔐', title:'Accesos activos', desc:`${accesos.filter(a=>a.estado==='Activo').length} accesos habilitados.`, action: () => {
+        const flat = accesos.filter(a=>a.estado==='Activo').map(a => ({
+          ...a,
+          sistema: Array.isArray(a.sistema) ? a.sistema.join(', ') : (a.sistema||'')
+        }));
+        exportReportXLS('Accesos Activos', flat, ['usuario','sistema','perfil','alta','autorizante']);
+      }
+    },
     { icon:'🔧', title:'Equipos en reparación', desc:`${equipos.filter(e=>e.estado==='Reparación').length} equipos en servicio técnico.`, action: () => exportReportXLS('En Reparación', equipos.filter(e=>e.estado==='Reparación'), ['serie','tipo','marca','modelo','sector','obs']) },
     { icon:'📦', title:'Equipos obsoletos', desc:`${equipos.filter(e=>e.estado==='Obsoleto').length} equipos fuera de servicio.`, action: () => exportReportXLS('Obsoletos', equipos.filter(e=>e.estado==='Obsoleto'), ['serie','tipo','marca','modelo','compra','garantia','obs']) },
     { icon:'⚠', title:'Garantías vencidas', desc:'Equipos con garantía expirada.', action: () => exportReportXLS('Garantías Vencidas', equipos.filter(e=>e.garantia&&new Date(e.garantia)<new Date()), ['serie','tipo','marca','modelo','compra','garantia','sector','estado']) },
@@ -1171,48 +1216,104 @@ function saveAcceso() {
 function formAcceso(id) {
   const d = id ? load('accesos').find(x=>x.id===id) : {};
   const v = (f, def='') => d[f] !== undefined ? d[f] : def;
-  // Usar SISTEMAS_ACCESO centralizado (v1.1 ampliado con TS1/TS2/TS3 y más)
-  // Si el registro existente tiene un valor no listado, se agrega dinámicamente
-  const curSistema = v('sistema');
-  const sistList = curSistema && !SISTEMAS_ACCESO.includes(curSistema)
-    ? [...SISTEMAS_ACCESO.slice(0,-1), curSistema, 'Otro']
-    : SISTEMAS_ACCESO;
+
+  // Normalizar sistemas actuales a array (compatibilidad con registros viejos)
+  const curSistemas = Array.isArray(d.sistema)
+    ? d.sistema
+    : (d.sistema ? [d.sistema] : []);
+
   const opt = (vals, cur) => vals.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join('');
+
+  // Construir checkboxes de sistemas, marcando los ya seleccionados
+  const checkboxes = SISTEMAS_ACCESO.map((s, i) => {
+    const checked = curSistemas.includes(s) ? 'checked' : '';
+    return `
+    <label class="sis-check-item ${checked ? 'checked' : ''}" id="sislbl-${i}" onclick="toggleSisCheck(${i})">
+      <input type="checkbox" id="sis-${i}" value="${s}" ${checked} onchange="toggleSisCheck(${i})" onclick="event.stopPropagation()" />
+      <span>${sistemaIcon(s)} ${s}</span>
+    </label>`;
+  }).join('');
+
   return `
   <div class="form-row">
     <div class="form-group"><label>Usuario de red</label><input id="f-usr" class="form-input" value="${v('usuario')}" /></div>
-    <div class="form-group"><label>Sistema</label>
-      <select id="f-sis" class="form-input">${opt(sistList,curSistema)}</select>
-    </div>
-  </div>
-  <div class="form-row">
-    <div class="form-group"><label>Perfil / Rol</label><input id="f-perfil" class="form-input" value="${v('perfil')}" /></div>
     <div class="form-group"><label>Estado</label>
       <select id="f-estado" class="form-input">${opt(['Activo','Inactivo'],v('estado','Activo'))}</select>
     </div>
+  </div>
+
+  <div class="form-group">
+    <label>Sistemas habilitados <span style="color:var(--text3);font-weight:400;text-transform:none">(seleccioná uno o varios)</span></label>
+    <div class="sis-check-grid">${checkboxes}</div>
+    <div id="sis-selected-preview" style="margin-top:8px;font-size:11px;color:var(--text2)"></div>
+  </div>
+
+  <div class="form-row">
+    <div class="form-group"><label>Perfil / Rol</label><input id="f-perfil" class="form-input" value="${v('perfil')}" /></div>
+    <div class="form-group"><label>Autorizante</label><input id="f-auth" class="form-input" value="${v('autorizante')}" /></div>
   </div>
   <div class="form-row">
     <div class="form-group"><label>Fecha alta</label><input id="f-alta" type="date" class="form-input" value="${v('alta')}" /></div>
     <div class="form-group"><label>Fecha baja</label><input id="f-baja" type="date" class="form-input" value="${v('baja')}" /></div>
   </div>
-  <div class="form-group"><label>Autorizante</label><input id="f-auth" class="form-input" value="${v('autorizante')}" /></div>
   <div class="form-group"><label>Observaciones</label><textarea id="f-obs" class="form-input">${v('obs')}</textarea></div>
   <div class="form-actions">
     <button class="btn-outline" onclick="closeModal()">Cancelar</button>
     <button class="btn-primary" onclick="saveAcceso()">Guardar</button>
-  </div>`;
+  </div>
+  <script>
+    // Actualizar preview al abrir
+    (function(){ updateSisPreview(); })();
+  <\/script>`;
+}
+
+function toggleSisCheck(i) {
+  const cb  = document.getElementById(`sis-${i}`);
+  const lbl = document.getElementById(`sislbl-${i}`);
+  if (!cb || !lbl) return;
+  cb.checked = !cb.checked;
+  lbl.classList.toggle('checked', cb.checked);
+  updateSisPreview();
+}
+
+function updateSisPreview() {
+  const selected = SISTEMAS_ACCESO.filter((_, i) => {
+    const cb = document.getElementById(`sis-${i}`);
+    return cb && cb.checked;
+  });
+  const prev = document.getElementById('sis-selected-preview');
+  if (!prev) return;
+  prev.textContent = selected.length
+    ? `✓ ${selected.length} sistema(s) seleccionado(s): ${selected.join(', ')}`
+    : 'Ningún sistema seleccionado';
 }
 
 function saveAcceso() {
+  // Recolectar todos los sistemas chequeados
+  const sistemas = SISTEMAS_ACCESO.filter((_, i) => {
+    const cb = document.getElementById(`sis-${i}`);
+    return cb && cb.checked;
+  });
+
   const obj = {
     id: editingId || uid(),
-    usuario: g('f-usr'), sistema: g('f-sis'), perfil: g('f-perfil'),
-    estado: g('f-estado'), alta: g('f-alta'), baja: g('f-baja'),
-    autorizante: g('f-auth'), obs: g('f-obs'),
+    usuario: g('f-usr'),
+    sistema: sistemas,          // ← array (puede ser vacío)
+    perfil:  g('f-perfil'),
+    estado:  g('f-estado'),
+    alta:    g('f-alta'),
+    baja:    g('f-baja'),
+    autorizante: g('f-auth'),
+    obs:     g('f-obs'),
   };
-  if (!obj.usuario || !obj.sistema) { toast('Usuario y sistema son requeridos', 'error'); return; }
+  if (!obj.usuario) { toast('El usuario de red es requerido', 'error'); return; }
+  if (!obj.sistema.length) { toast('Seleccioná al menos un sistema', 'error'); return; }
+
   upsert('accesos', obj);
-  logMov('Acceso', 'Accesos', `${editingId?'Edición':'Alta'} de acceso ${obj.usuario} → ${obj.sistema}`, obj.usuario);
+  logMov('Acceso', 'Accesos',
+    `${editingId?'Edición':'Alta'} de accesos para ${obj.usuario}: ${obj.sistema.join(', ')}`,
+    obj.usuario
+  );
   closeModal(); renderAccesos();
   toast(`Acceso ${editingId?'actualizado':'creado'}`, 'success');
 }
@@ -1361,7 +1462,16 @@ function deleteItem(key, id) {
 function exportExcelModule(key) {
   const data = load(key);
   if (!data.length) { toast('Sin datos para exportar', 'error'); return; }
-  const ws   = XLSX.utils.json_to_sheet(data.map(r => { const {id,...rest} = r; return rest; }));
+  // Aplanar arrays antes de exportar (ej: sistema en accesos)
+  const flat = data.map(r => {
+    const { id, ...rest } = r;
+    const out = {};
+    Object.keys(rest).forEach(k => {
+      out[k] = Array.isArray(rest[k]) ? rest[k].join(', ') : rest[k];
+    });
+    return out;
+  });
+  const ws   = XLSX.utils.json_to_sheet(flat);
   const wb   = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, key);
   XLSX.writeFile(wb, `CLADAN_IT_${key}_${today()}.xlsx`);
