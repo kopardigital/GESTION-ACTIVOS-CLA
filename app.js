@@ -10,11 +10,48 @@
 ──────────────────────────────────────────────────────── */
 const AUTH = { user: 'admin', pass: 'Cambiar123!' };
 
-/* ─── STORAGE KEYS ──────────────────────────────────────── */
+/* ─── VERSIÓN DE DATOS ───────────────────────────────────
+   Clave: APP_DATA_VERSION en localStorage
+   v1.0 → estructura original (equipos,toners,usuarios,licencias,accesos,movimientos)
+   v1.1 → agrega módulo celulares + nuevos sistemas en accesos
+   NUNCA eliminar claves existentes de KEYS. Solo agregar.
+──────────────────────────────────────────────────────── */
+const DATA_VERSION = '1.1';
+const DATA_VERSION_KEY = 'APP_DATA_VERSION';
+
+/* ─── STORAGE KEYS ──────────────────────────────────────
+   REGLA: Nunca renombrar ni eliminar claves existentes.
+   Los datos de usuarios reales viven aquí.
+   Lista completa de claves usadas en localStorage:
+   - cit_equipos      → inventario de equipos
+   - cit_toners       → stock de toners
+   - cit_usuarios     → plantilla de usuarios
+   - cit_licencias    → licencias de software
+   - cit_accesos      → control de accesos a sistemas
+   - cit_movimientos  → historial de movimientos
+   - cit_celulares    → celulares corporativos (v1.1 nuevo)
+   - APP_DATA_VERSION → versión actual de la estructura
+──────────────────────────────────────────────────────── */
 const KEYS = {
   equipos: 'cit_equipos', toners: 'cit_toners', usuarios: 'cit_usuarios',
   licencias: 'cit_licencias', accesos: 'cit_accesos', movimientos: 'cit_movimientos',
+  celulares: 'cit_celulares',   // ← agregado en v1.1
 };
+
+/* ─── SISTEMAS DE ACCESO ─────────────────────────────────
+   Lista centralizada usada en form y filtro de accesos.
+   Agregados en v1.1: TS1, TS2, TS3, SharePoint, Teams,
+   Azure, GitHub, Jira, SAP, Salesforce, Zoom, Slack.
+   Los registros existentes con valores anteriores
+   se siguen mostrando sin problema (campo libre).
+──────────────────────────────────────────────────────── */
+const SISTEMAS_ACCESO = [
+  'Epicor','Microsoft 365','Correo','VPN','Power BI',
+  'Carpetas compartidas','Odoo',
+  'TS1','TS2','TS3',
+  'SharePoint','Teams','Azure','GitHub',
+  'Jira','SAP','Salesforce','Zoom','Slack','Otro',
+];
 
 /* ─── STATE ─────────────────────────────────────────────── */
 let CHARTS = {};
@@ -34,6 +71,49 @@ function logMov(tipo, modulo, descripcion, referencia = '') {
   const movs = load('movimientos');
   movs.unshift({ id: uid(), fecha: now(), tipo, modulo, descripcion, referencia });
   save('movimientos', movs.slice(0, 500)); // keep last 500
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MIGRACIÓN AUTOMÁTICA DE DATOS
+   Reglas:
+   - NUNCA eliminar datos existentes
+   - SOLO agregar campos con valor por defecto
+   - Detectar versión anterior y actualizar a la actual
+   - Idempotente: puede ejecutarse múltiples veces sin daño
+═══════════════════════════════════════════════════════════ */
+function migrateData() {
+  const currentVersion = localStorage.getItem(DATA_VERSION_KEY) || '1.0';
+
+  // ── Migración de v1.0 → v1.1 ──────────────────────────
+  if (currentVersion === '1.0') {
+    console.log('[CIT] Migrando datos de v1.0 → v1.1…');
+
+    // 1. Inicializar cit_celulares si no existe (módulo nuevo)
+    if (!localStorage.getItem(KEYS.celulares)) {
+      localStorage.setItem(KEYS.celulares, JSON.stringify([]));
+      console.log('[CIT] ✓ cit_celulares inicializado (vacío)');
+    }
+
+    // 2. Los accesos existentes son compatibles: el campo "sistema"
+    //    sigue siendo texto libre. Los nuevos valores (TS1/TS2/TS3…)
+    //    se incorporan solo en el <select> del formulario.
+    //    No se toca ningún registro guardado.
+    console.log('[CIT] ✓ Accesos: compatibilidad hacia atrás OK (campo texto libre)');
+
+    // 3. Los equipos, toners, usuarios, licencias y movimientos
+    //    no requieren cambios estructurales en v1.1.
+    console.log('[CIT] ✓ Módulos existentes: sin cambios requeridos');
+
+    // Marcar como migrado
+    localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
+    console.log('[CIT] ✓ Migración v1.0→v1.1 completada');
+  }
+
+  // Si ya es v1.1 o superior, no hace nada
+  if (currentVersion === DATA_VERSION) return;
+
+  // Asegurar que la clave de versión siempre esté actualizada
+  localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -97,6 +177,7 @@ function refreshPage(page) {
     case 'usuarios':    renderUsuarios(); populateSectorFilter('usr-sector'); break;
     case 'licencias':   renderLicencias(); break;
     case 'accesos':     renderAccesos(); break;
+    case 'celulares':   renderCelulares(); populateMarcaFilter(); break;
     case 'movimientos': renderMovimientos(); break;
     case 'reportes':    renderReportes(); break;
   }
@@ -109,6 +190,15 @@ function populateSectorFilter(selId) {
   const sectores = [...new Set(equipos.map(e => e.sector).filter(Boolean))].sort();
   sel.innerHTML = '<option value="">Sector</option>' +
     sectores.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+function populateMarcaFilter() {
+  const sel = document.getElementById('cel-marca');
+  if (!sel) return;
+  const celulares = load('celulares');
+  const marcas = [...new Set(celulares.map(c => c.marca).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Marca</option>' +
+    marcas.map(m => `<option value="${m}">${m}</option>`).join('');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -196,6 +286,19 @@ function loadDemoData(force = false) {
   save('accesos', accesos);
   save('movimientos', movs);
 
+  // ── Celulares demo (v1.1) ──
+  const celulares = [
+    { id: uid(), marca: 'Samsung', modelo: 'Galaxy A54', imei: '352099001234561', nroLinea: '11-5001-0001', operadora: 'Personal', estado: 'Asignado', usuario: 'Juan Pérez', sector: 'Comercial', sucursal: 'Casa Central', compra: '2023-05-10', garantia: '2025-05-10', obs: '' },
+    { id: uid(), marca: 'iPhone', modelo: 'iPhone 14', imei: '353490011234562', nroLinea: '11-5001-0002', operadora: 'Claro', estado: 'Asignado', usuario: 'Laura Torres', sector: 'Administración', sucursal: 'Casa Central', compra: '2023-03-01', garantia: '2025-03-01', obs: '' },
+    { id: uid(), marca: 'Motorola', modelo: 'Moto G82', imei: '357849051234563', nroLinea: '11-5001-0003', operadora: 'Movistar', estado: 'Disponible', usuario: '', sector: 'IT', sucursal: 'Casa Central', compra: '2022-11-20', garantia: '2024-11-20', obs: 'Sin asignar' },
+    { id: uid(), marca: 'Samsung', modelo: 'Galaxy A34', imei: '352099001234564', nroLinea: '11-5001-0004', operadora: 'Personal', estado: 'Asignado', usuario: 'Roberto Silva', sector: 'Logística', sucursal: 'Sucursal Sur', compra: '2024-01-15', garantia: '2026-01-15', obs: '' },
+    { id: uid(), marca: 'iPhone', modelo: 'iPhone 13', imei: '353490011234565', nroLinea: '', operadora: '', estado: 'Baja', usuario: '', sector: 'IT', sucursal: 'Casa Central', compra: '2021-09-10', garantia: '2023-09-10', obs: 'Pantalla rota, dado de baja' },
+  ];
+  save('celulares', celulares);
+
+  // Marcar versión de datos
+  localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
+
   toast('Datos demo cargados correctamente', 'success');
 }
 
@@ -209,6 +312,7 @@ function renderDashboard() {
   const licencias = load('licencias');
   const accesos   = load('accesos');
   const movs      = load('movimientos');
+  const celulares = load('celulares');
 
   // Date
   document.getElementById('dash-date').textContent =
@@ -273,6 +377,7 @@ function renderDashboard() {
     { lbl: 'Usuarios dados de baja', val: usuarios.filter(u=>u.estado==='Baja').length, sub: 'desvinculados', clr: '#94a3b8', icon: '↓' },
     { lbl: 'Licencias asignadas',    val: licencias.reduce((s,l)=>s+l.asignadas,0), sub: 'total asignaciones', clr: '#8b5cf6', icon: '🔑' },
     { lbl: 'Accesos activos',        val: accesos.filter(a=>a.estado==='Activo').length, sub: 'habilitados', clr: '#0ea5e9', icon: '🔐' },
+    { lbl: 'Celulares asignados',    val: celulares.filter(c=>c.estado==='Asignado').length, sub: `de ${celulares.filter(c=>c.estado!=='Baja').length} en inventario`, clr: '#ec4899', icon: '📱' },
     { lbl: 'Equipos obsoletos',      val: equipos.filter(e=>e.estado==='Obsoleto').length, sub: 'a revisar', clr: '#64748b', icon: '📦' },
   ];
 
@@ -747,6 +852,7 @@ function renderReportes() {
   const usuarios  = load('usuarios');
   const licencias = load('licencias');
   const accesos   = load('accesos');
+  const celulares = load('celulares');
 
   const reports = [
     { icon:'💻', title:'Inventario general', desc:`${equipos.filter(e=>e.estado!=='Baja').length} equipos activos registrados.`, action: () => exportExcelModule('equipos') },
@@ -760,6 +866,8 @@ function renderReportes() {
     { icon:'🔧', title:'Equipos en reparación', desc:`${equipos.filter(e=>e.estado==='Reparación').length} equipos en servicio técnico.`, action: () => exportReportXLS('En Reparación', equipos.filter(e=>e.estado==='Reparación'), ['serie','tipo','marca','modelo','sector','obs']) },
     { icon:'📦', title:'Equipos obsoletos', desc:`${equipos.filter(e=>e.estado==='Obsoleto').length} equipos fuera de servicio.`, action: () => exportReportXLS('Obsoletos', equipos.filter(e=>e.estado==='Obsoleto'), ['serie','tipo','marca','modelo','compra','garantia','obs']) },
     { icon:'⚠', title:'Garantías vencidas', desc:'Equipos con garantía expirada.', action: () => exportReportXLS('Garantías Vencidas', equipos.filter(e=>e.garantia&&new Date(e.garantia)<new Date()), ['serie','tipo','marca','modelo','compra','garantia','sector','estado']) },
+    { icon:'📱', title:'Celulares corporativos', desc:`${celulares.filter(c=>c.estado!=='Baja').length} celulares en inventario · ${celulares.filter(c=>c.estado==='Asignado').length} asignados.`, action: () => exportExcelModule('celulares') },
+    { icon:'📱', title:'Celulares asignados', desc:'Lista de celulares por usuario.', action: () => exportReportXLS('Celulares Asignados', celulares.filter(c=>c.estado==='Asignado'), ['marca','modelo','imei','nroLinea','operadora','usuario','sector','sucursal']) },
     { icon:'📄', title:'Reporte general PDF', desc:'Exportar informe ejecutivo completo en PDF.', action: () => exportPDFGeneral() },
   ];
 
@@ -784,6 +892,7 @@ function openModal(type, id = null) {
     usuario:  formUsuario,
     licencia: formLicencia,
     acceso:   formAcceso,
+    celular:  formCelular,
   };
   const titles = {
     equipo: id ? 'Editar equipo' : 'Nuevo equipo',
@@ -791,6 +900,7 @@ function openModal(type, id = null) {
     usuario: id ? 'Editar usuario' : 'Nuevo usuario',
     licencia: id ? 'Editar licencia' : 'Nueva licencia',
     acceso:  id ? 'Editar acceso'  : 'Nuevo acceso',
+    celular: id ? 'Editar celular' : 'Nuevo celular',
   };
   document.getElementById('modal-title').textContent = titles[type];
   document.getElementById('modal-body').innerHTML = forms[type](id);
@@ -1057,6 +1167,171 @@ function saveAcceso() {
   toast(`Acceso ${editingId?'actualizado':'creado'}`, 'success');
 }
 
+/* ── ACCESO FORM ────────────────────────────────────────── */
+function formAcceso(id) {
+  const d = id ? load('accesos').find(x=>x.id===id) : {};
+  const v = (f, def='') => d[f] !== undefined ? d[f] : def;
+  // Usar SISTEMAS_ACCESO centralizado (v1.1 ampliado con TS1/TS2/TS3 y más)
+  // Si el registro existente tiene un valor no listado, se agrega dinámicamente
+  const curSistema = v('sistema');
+  const sistList = curSistema && !SISTEMAS_ACCESO.includes(curSistema)
+    ? [...SISTEMAS_ACCESO.slice(0,-1), curSistema, 'Otro']
+    : SISTEMAS_ACCESO;
+  const opt = (vals, cur) => vals.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join('');
+  return `
+  <div class="form-row">
+    <div class="form-group"><label>Usuario de red</label><input id="f-usr" class="form-input" value="${v('usuario')}" /></div>
+    <div class="form-group"><label>Sistema</label>
+      <select id="f-sis" class="form-input">${opt(sistList,curSistema)}</select>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Perfil / Rol</label><input id="f-perfil" class="form-input" value="${v('perfil')}" /></div>
+    <div class="form-group"><label>Estado</label>
+      <select id="f-estado" class="form-input">${opt(['Activo','Inactivo'],v('estado','Activo'))}</select>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Fecha alta</label><input id="f-alta" type="date" class="form-input" value="${v('alta')}" /></div>
+    <div class="form-group"><label>Fecha baja</label><input id="f-baja" type="date" class="form-input" value="${v('baja')}" /></div>
+  </div>
+  <div class="form-group"><label>Autorizante</label><input id="f-auth" class="form-input" value="${v('autorizante')}" /></div>
+  <div class="form-group"><label>Observaciones</label><textarea id="f-obs" class="form-input">${v('obs')}</textarea></div>
+  <div class="form-actions">
+    <button class="btn-outline" onclick="closeModal()">Cancelar</button>
+    <button class="btn-primary" onclick="saveAcceso()">Guardar</button>
+  </div>`;
+}
+
+function saveAcceso() {
+  const obj = {
+    id: editingId || uid(),
+    usuario: g('f-usr'), sistema: g('f-sis'), perfil: g('f-perfil'),
+    estado: g('f-estado'), alta: g('f-alta'), baja: g('f-baja'),
+    autorizante: g('f-auth'), obs: g('f-obs'),
+  };
+  if (!obj.usuario || !obj.sistema) { toast('Usuario y sistema son requeridos', 'error'); return; }
+  upsert('accesos', obj);
+  logMov('Acceso', 'Accesos', `${editingId?'Edición':'Alta'} de acceso ${obj.usuario} → ${obj.sistema}`, obj.usuario);
+  closeModal(); renderAccesos();
+  toast(`Acceso ${editingId?'actualizado':'creado'}`, 'success');
+}
+
+/* ── CELULAR FORM ───────────────────────────────────────── */
+function formCelular(id) {
+  const d = id ? load('celulares').find(x=>x.id===id) : {};
+  const v = (f, def='') => d[f] !== undefined ? d[f] : def;
+  const opt = (vals, cur) => vals.map(o=>`<option ${o===cur?'selected':''}>${o}</option>`).join('');
+  return `
+  <div class="form-row">
+    <div class="form-group"><label>Marca</label>
+      <select id="f-marca" class="form-input">
+        ${opt(['iPhone','Samsung','Motorola','Xiaomi','LG','Nokia','Huawei','Otro'],v('marca'))}
+      </select>
+    </div>
+    <div class="form-group"><label>Modelo</label><input id="f-modelo" class="form-input" value="${v('modelo')}" placeholder="ej: Galaxy A54, iPhone 14" /></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>IMEI</label><input id="f-imei" class="form-input" value="${v('imei')}" placeholder="15 dígitos" /></div>
+    <div class="form-group"><label>Nro de línea</label><input id="f-linea" class="form-input" value="${v('nroLinea')}" placeholder="ej: 11-5000-0000" /></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Operadora</label>
+      <select id="f-operadora" class="form-input">
+        ${opt(['Personal','Claro','Movistar','Tuenti','Sin línea','Otra'],v('operadora'))}
+      </select>
+    </div>
+    <div class="form-group"><label>Estado</label>
+      <select id="f-estado" class="form-input">
+        ${opt(['Disponible','Asignado','Reparación','Baja'],v('estado','Disponible'))}
+      </select>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Usuario asignado</label><input id="f-usuario" class="form-input" value="${v('usuario')}" /></div>
+    <div class="form-group"><label>Sector</label><input id="f-sector" class="form-input" value="${v('sector')}" /></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Sucursal</label><input id="f-sucursal" class="form-input" value="${v('sucursal')}" /></div>
+    <div class="form-group"><label>Fecha de compra</label><input id="f-compra" type="date" class="form-input" value="${v('compra')}" /></div>
+  </div>
+  <div class="form-row">
+    <div class="form-group"><label>Garantía hasta</label><input id="f-garantia" type="date" class="form-input" value="${v('garantia')}" /></div>
+    <div class="form-group"></div>
+  </div>
+  <div class="form-group"><label>Observaciones</label><textarea id="f-obs" class="form-input">${v('obs')}</textarea></div>
+  <div class="form-actions">
+    <button class="btn-outline" onclick="closeModal()">Cancelar</button>
+    <button class="btn-primary" onclick="saveCelular()">Guardar</button>
+  </div>`;
+}
+
+function saveCelular() {
+  const obj = {
+    id: editingId || uid(),
+    marca: g('f-marca'), modelo: g('f-modelo'), imei: g('f-imei'),
+    nroLinea: g('f-linea'), operadora: g('f-operadora'),
+    estado: g('f-estado'), usuario: g('f-usuario'), sector: g('f-sector'),
+    sucursal: g('f-sucursal'), compra: g('f-compra'), garantia: g('f-garantia'),
+    obs: g('f-obs'),
+  };
+  if (!obj.marca || !obj.modelo) { toast('Marca y modelo son requeridos', 'error'); return; }
+  upsert('celulares', obj);
+  logMov('Celular', 'Celulares', `${editingId?'Edición':'Alta'} de celular ${obj.marca} ${obj.modelo}${obj.usuario?' → '+obj.usuario:''}`, obj.imei||obj.modelo);
+  closeModal(); renderCelulares(); populateMarcaFilter();
+  toast(`Celular ${editingId?'actualizado':'registrado'}`, 'success');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CELULARES – RENDER
+═══════════════════════════════════════════════════════ */
+function renderCelulares() {
+  const all    = load('celulares');
+  const search = (document.getElementById('cel-search')?.value || '').toLowerCase();
+  const fEst   = document.getElementById('cel-estado')?.value || '';
+  const fMarca = document.getElementById('cel-marca')?.value  || '';
+
+  const data = all.filter(c => {
+    if (c.estado === 'Baja' && fEst !== 'Baja') return false;
+    if (fEst   && c.estado !== fEst)   return false;
+    if (fMarca && c.marca  !== fMarca) return false;
+    if (search) {
+      const row = [c.marca,c.modelo,c.imei,c.nroLinea,c.usuario,c.sector,c.operadora,c.obs].join(' ').toLowerCase();
+      if (!row.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const cont = document.getElementById('celulares-table');
+  if (!data.length) {
+    cont.innerHTML = '<div class="table-empty">Sin resultados para los filtros aplicados.</div>';
+    return;
+  }
+
+  cont.innerHTML = `<table>
+    <thead><tr>
+      <th>Marca / Modelo</th><th>IMEI</th><th>Nro Línea</th><th>Operadora</th>
+      <th>Estado</th><th>Usuario</th><th>Sector</th><th>Garantía</th><th>Acciones</th>
+    </tr></thead>
+    <tbody>${data.map(c => {
+      const gvenc = c.garantia && new Date(c.garantia) < new Date();
+      return `<tr class="${gvenc?'row-warn':''}">
+        <td><strong>${c.marca}</strong> ${c.modelo}</td>
+        <td><span style="font-size:11px;font-family:monospace">${c.imei||'—'}</span></td>
+        <td>${c.nroLinea||'—'}</td>
+        <td>${c.operadora||'—'}</td>
+        <td>${estadoBadge(c.estado)}</td>
+        <td>${c.usuario||'—'}</td>
+        <td>${c.sector||'—'}</td>
+        <td>${gvenc?'<span class="badge b-red">Vencida</span>':(c.garantia||'—')}</td>
+        <td><div class="tbl-actions">
+          <button class="btn-ghost btn-sm" onclick="openModal('celular','${c.id}')">✏</button>
+          <button class="btn-ghost btn-sm" style="color:var(--red)" onclick="deleteItem('celulares','${c.id}')">🗑</button>
+        </div></td>
+      </tr>`;}).join('')}
+    </tbody></table>`;
+}
+
 /* ═══════════════════════════════════════════════════════════
    UPSERT & DELETE
 ═══════════════════════════════════════════════════════ */
@@ -1072,7 +1347,10 @@ function deleteItem(key, id) {
   if (!confirm('¿Eliminar este registro? Esta acción no se puede deshacer.')) return;
   const data = load(key).filter(x => x.id !== id);
   save(key, data);
-  const renders = { equipos:renderEquipos, toners:renderToners, usuarios:renderUsuarios, licencias:renderLicencias, accesos:renderAccesos };
+  const renders = {
+    equipos: renderEquipos, toners: renderToners, usuarios: renderUsuarios,
+    licencias: renderLicencias, accesos: renderAccesos, celulares: renderCelulares,
+  };
   if (renders[key]) renders[key]();
   toast('Registro eliminado', 'info');
 }
@@ -1104,11 +1382,12 @@ function exportBackup() {
   const backup = {};
   Object.keys(KEYS).forEach(k => { backup[k] = load(k); });
   backup._exported = now();
-  backup._version = '1.0';
+  backup._version  = DATA_VERSION;
+  backup._versionKey = DATA_VERSION_KEY;
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement('a');
-  a.href = url; a.download = `CLADAN_IT_backup_${today()}.json`;
+  a.href = url; a.download = `CLADAN_IT_backup_v${DATA_VERSION}_${today()}.json`;
   a.click(); URL.revokeObjectURL(url);
   toast('Backup exportado correctamente', 'success');
 }
@@ -1121,9 +1400,16 @@ function importBackup(input) {
     try {
       const data = JSON.parse(e.target.result);
       let count = 0;
+      // Restaurar todos los módulos conocidos (compatibilidad hacia atrás)
       Object.keys(KEYS).forEach(k => {
-        if (data[k]) { save(k, data[k]); count++; }
+        if (data[k] !== undefined) { save(k, data[k]); count++; }
       });
+      // Restaurar versión si está en el backup
+      if (data._version) {
+        localStorage.setItem(DATA_VERSION_KEY, data._version);
+        // Re-ejecutar migración por si el backup era de una versión anterior
+        migrateData();
+      }
       toast(`Backup importado: ${count} módulos restaurados`, 'success');
       renderDashboard();
     } catch {
@@ -1137,6 +1423,8 @@ function importBackup(input) {
 function clearDemoData() {
   if (!confirm('¿Eliminar TODOS los datos demo? Esta acción no se puede deshacer.')) return;
   Object.keys(KEYS).forEach(k => save(k, []));
+  // Conservar la versión de datos aunque se limpie el contenido
+  localStorage.setItem(DATA_VERSION_KEY, DATA_VERSION);
   renderDashboard();
   toast('Datos eliminados. Sistema en blanco listo para uso.', 'info');
 }
@@ -1148,6 +1436,7 @@ async function exportPDFGeneral() {
   const toners    = load('toners');
   const usuarios  = load('usuarios');
   const licencias = load('licencias');
+  const celulares = load('celulares');
   const W = 210; let y = 0;
 
   // Header
@@ -1187,6 +1476,7 @@ async function exportPDFGeneral() {
     ['Toners con stock crítico', toners.filter(t=>t.stock<=t.minimo).length],
     ['Usuarios activos', usuarios.filter(u=>u.estado==='Activo').length],
     ['Licencias asignadas', licencias.reduce((s,l)=>s+l.asignadas,0)],
+    ['Celulares asignados', celulares.filter(c=>c.estado==='Asignado').length],
   ];
   kpis.forEach(([l,v]) => row(l, v));
   y += 4;
@@ -1215,6 +1505,17 @@ async function exportPDFGeneral() {
     usrTable.push([u.nombre,u.usuarioRed,u.sector,u.puesto,u.equipo||'—'])
   );
   drawTable(doc, usrTable, 14, y, [42,24,26,30,34]); y += usrTable.length * 7 + 8;
+
+  // Celulares
+  if (celulares.length > 0) {
+    if (y > 220) { doc.addPage(); y = 16; }
+    section('CELULARES CORPORATIVOS');
+    const celTable = [['Marca','Modelo','IMEI','Línea','Operadora','Estado','Usuario']];
+    celulares.filter(c=>c.estado!=='Baja').forEach(c =>
+      celTable.push([c.marca,c.modelo,c.imei||'—',c.nroLinea||'—',c.operadora||'—',c.estado,c.usuario||'—'])
+    );
+    drawTable(doc, celTable, 14, y, [20,24,32,22,20,18,30]); y += celTable.length * 7 + 8;
+  }
 
   // Footer
   const pages = doc.internal.getNumberOfPages();
@@ -1261,6 +1562,16 @@ async function exportPDFModule(module) {
 ═══════════════════════════════════════════════════════ */
 const g = id => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
 
+function showVersionInfo() {
+  const storedVersion = localStorage.getItem(DATA_VERSION_KEY) || 'Sin versión (v1.0 original)';
+  const counts = Object.keys(KEYS).map(k => {
+    const data = load(k);
+    return `${k}: ${data.length} registros`;
+  });
+  const info = `CLADAN IT Control\nVersión de app: ${DATA_VERSION}\nVersión de datos: ${storedVersion}\n\nRegistros en localStorage:\n${counts.join('\n')}`;
+  alert(info);
+}
+
 function toast(msg, type = 'info') {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -1276,6 +1587,12 @@ function toast(msg, type = 'info') {
 document.addEventListener('DOMContentLoaded', () => {
   initAuth();
   initNav();
+  // ── Migración automática ──────────────────────────────
+  // Se ejecuta ANTES de loadDemoData para no sobreescribir datos reales.
+  // Solo actúa si hay datos existentes y la versión es anterior.
+  migrateData();
+  // ── Datos demo ────────────────────────────────────────
+  // Solo carga si no hay datos previos (detecta equipos existentes).
   loadDemoData();
   if (sessionStorage.getItem('cit_auth')) {
     renderDashboard();

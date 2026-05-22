@@ -56,6 +56,7 @@
       <button class="nav-btn" data-page="toners">🖨 Toners</button>
       <button class="nav-btn" data-page="usuarios">👤 Usuarios</button>
       <button class="nav-btn" data-page="licencias">🔑 Licencias</button>
+      <button class="nav-btn" data-page="celulares">📱 Celulares</button>
       <button class="nav-btn" data-page="accesos">🔐 Accesos</button>
       <button class="nav-btn" data-page="movimientos">📋 Movimientos</button>
       <button class="nav-btn" data-page="reportes">📄 Reportes</button>
@@ -215,7 +216,11 @@
           <option value="">Sistema</option>
           <option>Epicor</option><option>Microsoft 365</option><option>Correo</option>
           <option>VPN</option><option>Power BI</option><option>Carpetas compartidas</option>
-          <option>Odoo</option><option>Otro</option>
+          <option>Odoo</option><option>TS1</option><option>TS2</option><option>TS3</option>
+          <option>SharePoint</option><option>Teams</option><option>Azure</option>
+          <option>GitHub</option><option>Jira</option><option>SAP</option>
+          <option>Salesforce</option><option>Zoom</option><option>Slack</option>
+          <option>Otro</option>
         </select>
         <select class="filter-sel" id="acc-estado" onchange="renderAccesos()">
           <option value="">Estado</option>
@@ -223,6 +228,29 @@
         </select>
       </div>
       <div class="table-wrap" id="accesos-table"></div>
+    </section>
+
+    <!-- ─── CELULARES ─── -->
+    <section class="page" id="page-celulares">
+      <div class="page-header">
+        <h1>Celulares Corporativos</h1>
+        <div class="header-right">
+          <button class="btn-primary" onclick="openModal('celular')">＋ Nuevo celular</button>
+          <button class="btn-outline" onclick="exportExcelModule('celulares')">↓ Excel</button>
+        </div>
+      </div>
+      <div class="filters-bar">
+        <input type="text" class="search-input" id="cel-search" placeholder="🔍 Buscar…" oninput="renderCelulares()" />
+        <select class="filter-sel" id="cel-estado" onchange="renderCelulares()">
+          <option value="">Estado</option>
+          <option>Disponible</option><option>Asignado</option><option>Reparación</option>
+          <option>Baja</option>
+        </select>
+        <select class="filter-sel" id="cel-marca" onchange="renderCelulares()">
+          <option value="">Marca</option>
+        </select>
+      </div>
+      <div class="table-wrap" id="celulares-table"></div>
     </section>
 
     <!-- ─── MOVIMIENTOS ─── -->
@@ -238,7 +266,7 @@
         <select class="filter-sel" id="mov-tipo" onchange="renderMovimientos()">
           <option value="">Tipo</option>
           <option>Equipo</option><option>Toner</option><option>Usuario</option>
-          <option>Licencia</option><option>Acceso</option>
+          <option>Licencia</option><option>Acceso</option><option>Celular</option>
         </select>
         <input type="date" class="filter-sel" id="mov-desde" onchange="renderMovimientos()" />
         <input type="date" class="filter-sel" id="mov-hasta" onchange="renderMovimientos()" />
@@ -283,6 +311,11 @@
           <p>Restaurar los datos demo iniciales para pruebas.</p>
           <button class="btn-outline" onclick="loadDemoData(true)">Cargar datos demo</button>
         </div>
+        <div class="card config-card">
+          <h3>ℹ Versión del sistema</h3>
+          <p id="version-info">Sistema CLADAN IT Control</p>
+          <button class="btn-outline" onclick="showVersionInfo()">Ver detalles</button>
+        </div>
         <div class="card config-card full-col">
           <h3>📊 Exportaciones masivas</h3>
           <div class="export-btns">
@@ -291,6 +324,7 @@
             <button class="btn-outline" onclick="exportExcelModule('toners')">↓ Toners Excel</button>
             <button class="btn-outline" onclick="exportExcelModule('licencias')">↓ Licencias Excel</button>
             <button class="btn-outline" onclick="exportExcelModule('accesos')">↓ Accesos Excel</button>
+            <button class="btn-outline" onclick="exportExcelModule('celulares')">↓ Celulares Excel</button>
             <button class="btn-primary" onclick="exportPDFGeneral()">↓ Reporte general PDF</button>
           </div>
         </div>
